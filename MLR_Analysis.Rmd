@@ -1,0 +1,117 @@
+---
+title: "NPO Multiple Linear Regression"
+---
+
+```{r message=FALSE, warning=FALSE}
+#Import packages
+library(car)
+library(corrplot)
+library(RColorBrewer)
+```
+
+```{r}
+data <- read.csv('MLR.csv')
+data <- data.frame(data[,-1], row.names = data[,1]) #set index to date
+head(data)
+
+summary(data)
+```
+
+There are no missing variables!
+
+```{r}
+#Model with all predictors
+comp_model <- lm(ectr ~ ., data = data)
+summary(comp_model)
+```
+
+Above model has an adjusted R-squared of 0.7835
+
+## Assumption checking
+
+#### Multicollinearity:
+
+```{r Multicollinearity}
+#Calculate Variance Inflation Factor between outcome variable (ECTR) and all predictor variables
+vif_values <- vif(comp_model)
+vif_values
+
+#Correlation plot (to check for correlation among predictors too)
+subset_data <- data[, sapply(data, is.numeric)]
+M <-cor(subset_data)
+corrplot(M, type="upper", order="hclust", col=brewer.pal(n=8, name="RdYlBu"), tl.col = "black")
+```
+
+Correlation among variables is fine (i.e. all around 1 or 2) so we can continue with this model!
+
+#### Model residuals:
+
+```{r Model residuals}
+#Constant variance
+plot(comp_model, which = 1)
+
+#Get the model residuals
+model_residuals = comp_model$residuals
+hist(model_residuals)
+
+#Q-Q plot
+plot(comp_model, which = 2)
+```
+
+The line of the first plot should be linear and kind of is, but some pattern is visible, which would indicate homoscedasticity. It looks fine in terms of normal distribution, not perfect but that is okay!
+
+#### Outliers:
+
+```{r Outliers}
+plot(comp_model, which=4)
+```
+
+The biggest outliers are 2024-01-10 (also the feature release of pb_recommendations), 2023-12-15 (?) and 2023-12-25 (also Christmas)
+
+## Choosing the best model
+
+```{r Final model}
+#Adjusted R-squared = 0.7848, and has therefore increased a bit
+model2 <- lm(ectr ~ . - temperature, data = data)
+summary(model2)
+
+#Adjusted R-squared = 0.786, and has therefore increased a bit
+model3 <- lm(ectr ~ . - temperature - sun, data = data)
+summary(model3)
+
+#Adjusted R-squared = 0.7865, and has therefore increased a bit
+model4 <- lm(ectr ~ popularity + diversity + feature_autoplay + feature_pb_search + feature_pb_recommendations + feature_follow + day_type + holiday, data = data)
+summary(model4)
+
+#Adjusted R-squared = 0.7862, and has therefore decreased a bit
+model5 <- lm(ectr ~ . - temperature - sun - rain - feature_pb_search, data = data)
+summary(model5)
+```
+
+#### Let's test the assumptions again with the final model!
+
+```{r Assumptions for final model}
+#Our final model is model 4!
+#Note: I changed the reference category for the day type to the first day: Monday
+final_model <- lm(ectr ~ popularity + diversity + feature_autoplay + feature_pb_search + feature_pb_recommendations+ feature_follow + relevel(factor(day_type), ref = "Monday") + holiday, data = data)
+summary(final_model)
+
+#Multicollinearity
+#Vif values are still fine
+vif_values <- vif(final_model)
+vif_values
+
+#Constant variance
+plot(final_model, which = 1)
+
+#Get the model residuals
+final_model_residuals = final_model$residuals
+hist(final_model_residuals)
+
+#Q-Q plot
+plot(final_model, which = 2)
+
+#Outliers
+#Largest outliers are 2023-12-15, 2024-01-07 and 2024-01-10
+plot(final_model, which=4)
+```
